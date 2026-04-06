@@ -170,7 +170,6 @@ struct buffer_complete_data {
 	__u64 payload_bytes_received;
 };
 
-#pragma pack(push, 1)
 struct leader_header {
 	__le32 magic_key;
 	__le16 reserved0;
@@ -178,12 +177,12 @@ struct leader_header {
 	__le64 block_id;
 	__le16 reserved1;
 	__le16 payload_type;
-};
+} __packed;
 
 struct leader {
 	struct leader_header header;
-	__u8 payload_type_info[0];
-};
+	__u8 payload_type_info[];
+} __packed;
 
 struct image_leader_info {
 	__le64 timestamp;
@@ -194,11 +193,11 @@ struct image_leader_info {
 	__le32 offset_y;
 	__le16 padding_x;
 	__le16 reserved;
-};
+} __packed;
 
 struct chunk_leader_info {
 	__le64 timestamp;
-};
+} __packed;
 
 struct trailer_header {
 	__le32 magic_key;
@@ -208,25 +207,25 @@ struct trailer_header {
 	__le16 status;
 	__le16 reserved1;
 	__le64 valid_payload_size;
-};
+} __packed;
 
 struct trailer {
 	struct trailer_header header;
-	__u8 payload_type_info[0];
-};
+	__u8 payload_type_info[];
+} __packed;
 
 struct image_trailer_info {
 	__le32 size_y;
-};
+} __packed;
 
 struct image_extended_chunk_trailer_info {
 	__le32 size_y;
 	__le32 chunk_layout_id;
-};
+} __packed;
 
 struct chunk_trailer_info {
 	__le32 chunk_layout_id;
-};
+} __packed;
 
 /* Command interface shared structs */
 struct command_header {
@@ -235,12 +234,12 @@ struct command_header {
 	__le16 cmd;
 	__le16 length;
 	__le16 request_id;
-};
+} __packed;
 
 struct command {
 	struct command_header header;
-	__u8 payload[0];
-};
+	__u8 payload[];
+} __packed;
 
 struct ack_header {
 	__le32 prefix;
@@ -248,46 +247,45 @@ struct ack_header {
 	__le16 cmd;
 	__le16 length;
 	__le16 ack_id;
-};
+} __packed;
 
 struct ack {
 	struct ack_header header;
-	__u8 payload[0];
-};
+	__u8 payload[];
+} __packed;
 
 struct read_mem_cmd_payload {
 	__le64 address;
 	__le16 reserved;
 	__le16 byte_count;
-};
+} __packed;
 
-struct read_mem_ack_payload {
-	__u8 data[0];
-};
+/*
+ * read_mem_ack_payload is accessed via ack->payload directly.
+ * The data starts at offset 0 within the payload.
+ */
 
 struct write_mem_cmd_payload {
 	__le64 address;
-	__u8 data[0];
-};
+	__u8 data[];
+} __packed;
 
 struct write_mem_ack_payload {
 	__le16 reserved;
 	__le16 bytes_written;
-};
+} __packed;
 
 struct pending_ack_payload {
 	__le16 reserved;
 	__le16 timeout;
-};
+} __packed;
 
 struct event_cmd_payload {
 	__le16 reserved;
 	__le16 event_id;
 	__le64 timestamp;
-	__u8 data[0];
-};
-
-#pragma pack(pop)
+	__u8 data[];
+} __packed;
 
 /* Event interface shared struct */
 struct event_complete_data {

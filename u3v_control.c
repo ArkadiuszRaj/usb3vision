@@ -228,6 +228,7 @@ int u3v_read_memory(struct u3v_control *ctrl, u32 transfer_size,
 	int actual = 0;
 	int ret = 0;
 	int total_bytes_read = 0;
+	int stale_ack_count = 0;
 	bool request_acknowledged = false;
 	size_t cmd_buffer_size = sizeof(struct command_header) +
 		sizeof(struct read_mem_cmd_payload);
@@ -356,8 +357,15 @@ int u3v_read_memory(struct u3v_control *ctrl, u32 transfer_size,
 			 * pipe that needs to be thrown away. We just submit
 			 * another read in that case.
 			 */
-			if (ack->header.ack_id == (ctrl->request_id - 1))
+			if (ack->header.ack_id == (ctrl->request_id - 1)) {
+				if (++stale_ack_count > 5) {
+					dev_err(dev, "%s: Too many stale acks\n",
+						__func__);
+					ret = U3V_ERR_INVALID_DEVICE_RESPONSE;
+					goto exit;
+				}
 				continue;
+			}
 
 			/* Inspect the acknowledge buffer */
 			if (((ack->header.cmd != READMEM_ACK) &&
@@ -463,6 +471,7 @@ int u3v_write_memory(struct u3v_control *ctrl, u32 transfer_size,
 	struct pending_ack_payload *pending_ack = NULL;
 	struct write_mem_ack_payload *write_mem_ack = NULL;
 	bool request_acknowledged = false;
+	int stale_ack_count = 0;
 	int actual = 0;
 
 	if (buffer == NULL)
@@ -487,15 +496,13 @@ int u3v_write_memory(struct u3v_control *ctrl, u32 transfer_size,
 		dev_err(dev,
 			"%s: Requested ack buffer of size %zu, but maximum size is %d\n",
 			__func__, ack_buffer_size, ctrl->max_ack_transfer_size);
-		ret = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 
 	if (max_bytes_per_write <= 0) {
 		dev_err(dev, "%s: Requested cmd buffer of size <= 0\n",
 			__func__);
-		ret = -EINVAL;
-		goto exit;
+		return -EINVAL;
 	}
 
 	dev_dbg(dev, "%s: write mem: address = %llX, transfer_size = %d",
@@ -583,8 +590,15 @@ int u3v_write_memory(struct u3v_control *ctrl, u32 transfer_size,
 			 * pipe that needs to be thrown away. We just submit
 			 * another read in that case.
 			 */
-			if (ack->header.ack_id == (ctrl->request_id - 1))
+			if (ack->header.ack_id == (ctrl->request_id - 1)) {
+				if (++stale_ack_count > 5) {
+					dev_err(dev, "%s: Too many stale acks\n",
+						__func__);
+					ret = U3V_ERR_INVALID_DEVICE_RESPONSE;
+					goto exit;
+				}
 				continue;
+			}
 
 			write_mem_ack = (struct write_mem_ack_payload *)
 				(ack->payload);

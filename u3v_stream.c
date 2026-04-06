@@ -67,7 +67,7 @@ enum u3v_buffer_state {
 
 struct u3v_buffer {
 	u32 urb_info_count;
-	u32 incomplete_callbacks_received;
+	atomic_t incomplete_callbacks_received;
 	u32 leader_received_size;
 	u32 payload_received_size;
 	u32 trailer_received_size;
@@ -618,7 +618,7 @@ int u3v_destroy_stream(struct u3v_device *u3v)
 
 	mutex_lock(&stream->stream_lock);
 
-	for (node = rb_first(&stream->root); node; node = rb_next(node)) {
+	while ((node = rb_first(&stream->root)) != NULL) {
 		entry = rb_entry(node, struct u3v_buffer, node);
 		destroy_buffer(stream, entry->buffer_id);
 	}
@@ -1853,7 +1853,7 @@ static void reset_counters(struct u3v_buffer *entry)
 {
 	entry->state = u3v_idle;
 	atomic_set(&entry->callbacks_received, 0);
-	entry->incomplete_callbacks_received = 0;
+	atomic_set(&entry->incomplete_callbacks_received, 0);
 	entry->leader_received_size = 0;
 	entry->payload_received_size = 0;
 	entry->trailer_received_size = 0;
@@ -1951,7 +1951,7 @@ static void stream_urb_completion(struct urb *purb)
 		return;
 
 	/* If status is already bad, don't overwrite */
-	if (entry->status != 0)
+	if (entry->status == 0)
 		entry->status = purb->status;
 	len = purb->actual_length;
 
@@ -1961,7 +1961,7 @@ static void stream_urb_completion(struct urb *purb)
 			"%s: entry %llu, urb %u: length = %u, expected >=%u\n",
 			__func__, entry->buffer_id, urb_info->urb_index, len,
 			urb_info->expected_size);
-		entry->incomplete_callbacks_received++;
+		atomic_inc(&entry->incomplete_callbacks_received);
 	}
 
 	/* Handle the callback based on the urb index */
@@ -2149,7 +2149,7 @@ int u3v_wait_for_buffer(struct u3v_stream *stream, u64 buffer_id,
 		bcd.status = entry->status;
 		bcd.expected_urb_count = entry->urb_info_count;
 		bcd.incomplete_urb_count =
-			entry->incomplete_callbacks_received;
+			atomic_read(&entry->incomplete_callbacks_received);
 		bcd.payload_bytes_received = entry->payload_received_size;
 		ret = copy_to_user(u_buffer_complete_data, &bcd,
 			bcd.structure_size);
@@ -2204,8 +2204,7 @@ static int reset_stream(struct u3v_stream *stream)
 	struct u3v_device *u3v = stream->u3v_dev;
 	struct usb_device *udev = u3v->udev;
 	u8 ep_addr = u3v->stream_info.bulk_in->bEndpointAddress;
-	int dummy_size = 32;
-	u8 dummy_buffer[dummy_size];
+	u8 dummy_buffer[32];
 	int actual = 0;
 	int ret = 0;
 
@@ -2237,7 +2236,7 @@ static int reset_stream(struct u3v_stream *stream)
 			/* submit dummy read */
 			usb_bulk_msg(udev, usb_sndbulkpipe(udev,
 				usb_endpoint_num(u3v->stream_info.bulk_in)),
-				dummy_buffer, dummy_size,
+				dummy_buffer, sizeof(dummy_buffer),
 				&actual, U3V_TIMEOUT);
 			/* clear stall */
 			ret = usb_clear_halt(udev,
@@ -2250,7 +2249,7 @@ static int reset_stream(struct u3v_stream *stream)
 			/* submit another dummy read */
 			usb_bulk_msg(udev, usb_sndbulkpipe(udev,
 				usb_endpoint_num(u3v->stream_info.bulk_in)),
-				dummy_buffer, dummy_size,
+				dummy_buffer, sizeof(dummy_buffer),
 				&actual, U3V_TIMEOUT);
 		}
 	}

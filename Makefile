@@ -48,6 +48,7 @@ u3v-objs := u3v_core.o u3v_control.o u3v_event.o u3v_stream.o
 else
 
 PWD := $(shell pwd)
+KERNELHEADERS ?= /lib/modules/$(shell uname -r)/build
 
 MOD_DIR := kernel/natinst/u3v
 MOD_PATH := /lib/modules/$(shell uname -r)/$(MOD_DIR)
@@ -55,8 +56,8 @@ MOD_PATH := /lib/modules/$(shell uname -r)/$(MOD_DIR)
 all:
 	@$(MAKE) --no-print-directory -C $(KERNELHEADERS) M=$(PWD) modules
 
-debug: all
-	EXTRA_CFLAGS += -DDEBUG -g
+debug:
+	@$(MAKE) --no-print-directory -C $(KERNELHEADERS) M=$(PWD) EXTRA_CFLAGS="-DDEBUG -g" modules
 
 install: all
 	@$(MAKE) --no-print-directory -C $(KERNELHEADERS) M=$(PWD) INSTALL_MOD_DIR=$(MOD_DIR) modules_install

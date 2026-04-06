@@ -350,8 +350,10 @@ static long u3v_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 		buffer = kzalloc(read_req->transfer_size, GFP_KERNEL);
-		if (buffer == NULL)
+		if (buffer == NULL) {
+			kfree(read_req);
 			return -ENOMEM;
+		}
 		GET_INTERFACE(struct u3v_control *, control,
 			u3v->control_info);
 		ret = u3v_read_memory(control,
@@ -359,8 +361,9 @@ static long u3v_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			read_req->address, buffer);
 		if (ret == 0) {
 			put_user(bytes_read, read_req->u_bytes_read);
-			ret = copy_to_user(read_req->u_buffer, buffer,
-				bytes_read);
+			if (copy_to_user(read_req->u_buffer, buffer,
+				bytes_read))
+				ret = -EFAULT;
 		}
 		PUT_INTERFACE(u3v->control_info);
 		kfree(buffer);
@@ -378,8 +381,10 @@ static long u3v_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 		buffer = kzalloc(write_req->transfer_size, GFP_KERNEL);
-		if (buffer == NULL)
+		if (buffer == NULL) {
+			kfree(write_req);
 			return -ENOMEM;
+		}
 		ret = copy_from_user(buffer, write_req->u_buffer,
 			write_req->transfer_size);
 		if (ret != 0) {
