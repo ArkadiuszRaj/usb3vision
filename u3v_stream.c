@@ -1350,12 +1350,21 @@ static struct page **lock_user_pages(struct u3v_stream *stream,
 		return NULL;
 
 	/* Fault in all of the necessary pages */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	/* Use pin_user_pages for kernels >= 5.6 */
+	ret = pin_user_pages(
+		uaddr,
+		num_pages,
+		FOLL_WRITE,
+		pages);
+#else
+	/* Legacy get_user_pages for older kernels */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
 	down_read(&current->mm->mmap_sem);
 #else
 	down_read(&current->mm->mmap_lock);
 #endif
-	/* will store a page locked array of physical pages in pages var */
 	ret = get_user_pages(
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 6, 0)
 		current,
@@ -1375,6 +1384,7 @@ static struct page **lock_user_pages(struct u3v_stream *stream,
 	up_read(&current->mm->mmap_sem);
 #else
 	up_read(&current->mm->mmap_lock);
+#endif
 #endif
 
 	if (ret < num_pages) {
@@ -1750,17 +1760,24 @@ static void destroy_pglist(struct u3v_pglist *pglist, bool dirty)
  */
 static void unlock_user_pages(struct u3v_pglist *pglist, int dirty)
 {
-	int i = 0;
-
 	if (pglist == NULL || pglist->pages == NULL)
 		return;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	if (pglist->num_pages > 0) {
+		if (dirty)
+			unpin_user_pages_dirty_lock(pglist->pages, pglist->num_pages, 0);
+		else
+			unpin_user_pages(pglist->pages, pglist->num_pages);
+	}
+#else
 	for (i = 0; i < pglist->num_pages; i++) {
 		struct page *page = pglist->pages[i];
 		if (dirty)
 			set_page_dirty_lock(page);
 		put_page(page);
 	}
+#endif
 	kfree(pglist->pages);
 }
 
